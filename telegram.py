@@ -117,3 +117,32 @@ while True:
         pass
 
     time.sleep(30)
+
+import threading
+threading.Thread(target=run_checks, daemon=True).start()  # <--- هنا شغلنا الفحص في Thread
+
+# -----------------------------
+# إضافة /help وطباعة الحالة كل دقيقة
+# -----------------------------
+from telegram.ext import CommandHandler
+
+def help_command(update, context):
+    context.bot.send_message(chat_id=update.effective_chat.id,
+                             text="مرحبًا! 🤖\n"
+                                  "البوت يقوم بإرسال كل الوظائف التي تطابق كلماتك المفتاحية فور نزولها على المواقع:\n"
+                                  "- Mostaql\n"
+                                  "- Khamsat\n"
+                                  "- Nafezly\n"
+                                  "- Upwork\n\n"
+                                  "استخدم /start لتفعيل البوت.\n"
+                                  "استخدم /help لعرض هذه الرسالة مرة أخرى.")
+
+help_handler = CommandHandler('help', help_command)
+dispatcher.add_handler(help_handler)
+
+def debug_status():
+    while True:
+        print("البوت شغال، يفحص المواقع الآن... عدد الوظائف المرسلة:", len(sent_links))
+        time.sleep(60)
+
+threading.Thread(target=debug_status, daemon=True).start()
