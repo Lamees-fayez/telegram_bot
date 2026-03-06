@@ -18,7 +18,12 @@ keywords = [
     "داش بورد",
     "eda",
     "تحليل بيانات",
-    "data analysis"
+    "data analysis",
+    "EDA",
+    "web scrapping",
+    "سحب بيانات",
+    "data entry",
+    "ادخال بيانات"
 ]
 
 # لتجنب تكرار إرسال نفس الوظيفة
@@ -110,4 +115,5 @@ while True:
         check_khamsat()
     except:
         pass
+
     time.sleep(30)
