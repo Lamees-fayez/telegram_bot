@@ -34,7 +34,7 @@ class KhamsatScraper:
     
     def search_requests(self) -> List[Dict]:
         jobs = []
-        keywords = ['excel', 'اكسل', 'power bi', 'داشبورد', 'تحليل', 'بيانات']
+        keywords = ['excel', 'اكسل', 'power bi', 'داشبورد', 'تحليل', 'بيانات','Excel','web scrapping',"سحب بيانات"]
         
         try:
             url = "https://khamsat.com/community/requests"
