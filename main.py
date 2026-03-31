@@ -1,4 +1,5 @@
 import os
+import pytz
 from dotenv import load_dotenv
 import logging
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -71,8 +72,8 @@ class JobsBot:
         self.scrape_all()
 
         # ⏱️ جدولة
-        scheduler = BackgroundScheduler()
-        scheduler.add_job(self.scrape_all, 'interval', minutes=SCRAPE_INTERVAL)
+        scheduler = BackgroundScheduler(timezone=pytz.utc)
+        scheduler.add_job(self.scrape_all, 'interval', minutes=int(SCRAPE_INTERVAL))
         scheduler.start()
 
         logger.info("🤖 البوت شغال - استخدمي /jobs")
