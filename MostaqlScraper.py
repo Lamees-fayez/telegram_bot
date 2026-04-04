@@ -51,11 +51,22 @@ class MostaqlScraper:
     def extract_price_from_card(self, card) -> str:
         try:
             text = card.get_text(" ", strip=True)
-            price_match = re.search(r'(\d+\s*-\s*\d+\s*\$|\d+\s*\$|\$\s*\d+)', text)
-            if price_match:
-                return price_match.group(1)
+
+            patterns = [
+                r'(\d+\s*-\s*\d+\s*\$)',
+                r'(\d+\s*\$)',
+                r'(\$\s*\d+\s*-\s*\d+)',
+                r'(\$\s*\d+)'
+            ]
+
+            for pattern in patterns:
+                match = re.search(pattern, text)
+                if match:
+                    return match.group(1).strip()
+
         except Exception:
             pass
+
         return "غير محدد"
 
     def extract_price_from_project_page(self, url: str) -> str:
@@ -84,39 +95,21 @@ class MostaqlScraper:
 
         return "غير محدد"
 
-    def extract_description_from_project_page(self, url: str) -> str:
-        try:
-            time.sleep(random.uniform(1, 2))
-            response = self.session.get(url, timeout=20)
-            response.raise_for_status()
-
-            soup = BeautifulSoup(response.text, "html.parser")
-
-            possible_blocks = soup.find_all(["p", "div"])
-            for block in possible_blocks:
-                txt = block.get_text(" ", strip=True)
-                if txt and len(txt) > 80:
-                    return txt[:400]
-
-        except Exception:
-            pass
-
-        return ""
-
     def search_jobs(self) -> List[Dict]:
         jobs = []
 
         try:
-            logger.info("🔍 البحث في مستقل من صفحة المشاريع...")
+            logger.info("🔍 البحث في مستقل (أحدث المشاريع المطابقة)...")
+
             response = self.session.get(self.PROJECTS_URL, timeout=20)
             response.raise_for_status()
 
             soup = BeautifulSoup(response.text, "html.parser")
 
-            # نجمع كل روابط المشاريع المحتملة
             project_links = soup.find_all("a", href=re.compile(r"^/project/\d+"))
-            logger.info(f"عدد الروابط المبدئي من مستقل: {len(project_links)}")
+            logger.info(f"📌 تم العثور على {len(project_links)} رابط مشروع مبدئي")
 
+            temp_jobs = []
             seen_urls = set()
 
             for link in project_links:
@@ -131,6 +124,9 @@ class MostaqlScraper:
                         continue
                     seen_urls.add(full_url)
 
+                    match = re.search(r'/project/(\d+)', href)
+                    project_id = int(match.group(1)) if match else 0
+
                     title = (
                         link.get_text(" ", strip=True)
                         or link.get("title", "")
@@ -143,40 +139,52 @@ class MostaqlScraper:
                     if not self.is_relevant(title):
                         continue
 
-                    card = link.find_parent(["div", "article", "li", "section"])
-                    price = "غير محدد"
+                    temp_jobs.append({
+                        "id": project_id,
+                        "title": title,
+                        "url": full_url,
+                        "link_elem": link
+                    })
 
+                except Exception as e:
+                    logger.warning(f"تخطي عنصر أثناء قراءة مشروع من مستقل: {e}")
+                    continue
+
+            # ترتيب من الأحدث إلى الأقدم
+            temp_jobs.sort(key=lambda x: x["id"], reverse=True)
+
+            # آخر 10 مشاريع مطابقة
+            latest_jobs = temp_jobs[:10]
+
+            for item in latest_jobs:
+                try:
+                    link = item["link_elem"]
+                    card = link.find_parent(["div", "article", "li", "section"])
+
+                    price = "غير محدد"
                     if card:
                         price = self.extract_price_from_card(card)
 
                     if price == "غير محدد":
-                        price = self.extract_price_from_project_page(full_url)
+                        price = self.extract_price_from_project_page(item["url"])
 
                     job = {
-                        "title": f"🆕 مشروع مستقل: {title[:120]}",
-                        "url": full_url,
+                        "title": f"🆕 مشروع مستقل: {item['title'][:120]}",
+                        "url": item["url"],
                         "price": price,
                         "description": "",
                         "posted_date": time.strftime("%Y-%m-%d %H:%M")
                     }
 
                     jobs.append(job)
-                    logger.info(f"✅ {title[:60]} -> {full_url}")
+                    logger.info(f"✅ {item['title'][:60]} -> {item['url']}")
 
                 except Exception as e:
-                    logger.warning(f"تخطي عنصر في مستقل: {e}")
+                    logger.warning(f"تعذر تجهيز مشروع من مستقل: {e}")
                     continue
 
         except Exception as e:
             logger.error(f"❌ خطأ في سحب مستقل: {e}")
 
-        # إزالة التكرار
-        unique_jobs = []
-        seen = set()
-        for job in jobs:
-            if job["url"] not in seen:
-                unique_jobs.append(job)
-                seen.add(job["url"])
-
-        logger.info(f"🎯 وجد {len(unique_jobs)} مشروع فريد من مستقل")
-        return unique_jobs[:10]
+        logger.info(f"🎯 تم جلب {len(jobs)} مشروع من مستقل (أحدث 10 مطابقين)")
+        return jobs
