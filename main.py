@@ -27,8 +27,7 @@ class JobsBot:
 
         self.scrapers = {
             "mostaql": MostaqlScraper(),
-            "khamsat_requests": KhamsatScraper(),
-            "upwork": UpworkScraper(),
+            "khamsat_requests": KhamsatScraper()
         }
 
     def scrape_all(self):
