@@ -1,5 +1,5 @@
 import logging
-from typing import Dict
+from typing import Dict, List
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Updater, CommandHandler, CallbackQueryHandler, CallbackContext
@@ -24,18 +24,21 @@ class TelegramBot:
         self.dispatcher.add_handler(CallbackQueryHandler(self.button_callback))
 
     def start_command(self, update: Update, context: CallbackContext):
-        text = """
-🎉 بوت فرص Excel & Power BI!
+        chat_id = update.effective_chat.id
+        self.db.add_subscriber(chat_id)
 
+        text = """
+🎉 بوت فرص Excel & Power BI
+
+تم تفعيل الإشعارات التلقائية عند نزول فرص جديدة ✅
+
+الأوامر:
 /jobs - آخر 8 فرص
 /help - مساعدة
-
-إشعارات تلقائية 🚀
         """
         update.message.reply_text(text)
 
     def get_jobs(self, update: Update, context: CallbackContext):
-        """عرض آخر المشاريع"""
         jobs = self.db.get_new_jobs()
 
         if not jobs:
@@ -47,19 +50,14 @@ class TelegramBot:
 
         for i, job in enumerate(recent, 1):
             url = job.get("url", "")
-            if "khamsat.com" in url and not url.startswith(("http://", "https://")):
-                url = "https://khamsat.com/" + url.lstrip("/")
-
             title = job.get("title", "بدون عنوان")
             price = job.get("price", "غير محدد")
             platform = job.get("platform", "unknown").replace("_", " ").title()
             posted_date = job.get("posted_date", job.get("scraped_date", ""))[:16]
 
             line1 = f"{i}. {title}"
-            if "طلب" in title:
-                line1 = f"🆕 {line1}"
-            elif "@" in title:
-                line1 = f"👤 {line1}"
+            if "طلب" in title or "🆕" in title:
+                line1 = f"🆕 {i}. {title}"
 
             message_lines.extend([
                 line1,
@@ -82,7 +80,6 @@ class TelegramBot:
         )
 
     def button_callback(self, update: Update, context: CallbackContext):
-        """معالج الأزرار"""
         query = update.callback_query
         query.answer()
 
@@ -97,20 +94,13 @@ class TelegramBot:
             lines = [f"📊 محدث - {len(recent)} فرصة:\n"]
 
             for i, job in enumerate(recent, 1):
-                url = job.get("url", "")
-                if "khamsat.com" in url and not url.startswith(("http://", "https://")):
-                    url = "https://khamsat.com/" + url.lstrip("/")
-
                 title = job.get("title", "بدون عنوان")
                 price = job.get("price", "غير محدد")
                 platform = job.get("platform", "unknown").replace("_", " ").title()
-
-                line1 = f"{i}. {title}"
-                if "طلب" in title:
-                    line1 = f"🆕 {line1}"
+                url = job.get("url", "")
 
                 lines.extend([
-                    line1,
+                    f"{i}. {title}",
                     f"💰 {price}",
                     f"🌐 {platform}",
                     f"🔗 {url}",
@@ -127,35 +117,55 @@ class TelegramBot:
             )
 
     def help_command(self, update: Update, context: CallbackContext):
-        """مساعدة"""
         help_text = """
 🤖 البوت يبحث في:
-
-- مستقل مشاريع
-- خمسات طلبات
-- خمسات خدمات
-- طلبات مستخدمين معينين
+- مستقل
+- خمسات
+- Upwork
 
 المهارات:
 ✅ Excel / اكسل
 ✅ Power BI / داشبورد
 ✅ تحليل بيانات
-✅ تنظيف بيانات
-✅ Web Scraping
+✅ Web Scraping / سحب بيانات
 
 /jobs - آخر الفرص
+/start - تفعيل الإشعارات التلقائية
         """
         update.message.reply_text(help_text)
 
-    def send_notification(self, user_id: int, job: Dict):
-        """إشعار جديد"""
-        try:
-            title = job.get("title", "فرصة جديدة")
-            url = job.get("url", "")
-            msg = f"🚨 فرصة جديدة!\n\n{title}\n{url}"
-            self.updater.bot.send_message(chat_id=user_id, text=msg, disable_web_page_preview=False)
-        except Exception as e:
-            logger.error(f"Error sending notification: {e}")
+    def format_job_message(self, job: Dict) -> str:
+        title = job.get("title", "فرصة جديدة")
+        url = job.get("url", "")
+        price = job.get("price", "غير محدد")
+        platform = job.get("platform", "unknown").replace("_", " ").title()
+
+        return (
+            f"🚨 فرصة جديدة نزلت!\n\n"
+            f"📌 {title}\n"
+            f"💰 {price}\n"
+            f"🌐 {platform}\n"
+            f"🔗 {url}"
+        )
+
+    def notify_subscribers(self, job: Dict):
+        subscribers = self.db.get_subscribers()
+        if not subscribers:
+            logger.info("لا يوجد مشتركين حالياً لتلقي الإشعارات")
+            return
+
+        msg = self.format_job_message(job)
+
+        for chat_id in subscribers:
+            try:
+                self.updater.bot.send_message(
+                    chat_id=chat_id,
+                    text=msg,
+                    disable_web_page_preview=False
+                )
+                logger.info(f"📨 تم إرسال إشعار إلى {chat_id}")
+            except Exception as e:
+                logger.error(f"فشل إرسال الإشعار إلى {chat_id}: {e}")
 
     def run(self):
         logger.info("Starting Telegram bot...")
