@@ -1,5 +1,5 @@
 import logging
-from typing import Dict, List
+from typing import Dict
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Updater, CommandHandler, CallbackQueryHandler, CallbackContext
@@ -33,20 +33,17 @@ class TelegramBot:
 تم تفعيل الإشعارات التلقائية عند نزول فرص جديدة ✅
 
 الأوامر:
-/jobs - آخر 8 فرص
+/jobs - آخر 10 فرص
 /help - مساعدة
         """
         update.message.reply_text(text)
 
-    def get_jobs(self, update: Update, context: CallbackContext):
-        jobs = self.db.get_new_jobs()
-
+    def build_jobs_message(self, jobs, title_prefix="📊 آخر"):
         if not jobs:
-            update.message.reply_text("📭 لا توجد فرص جديدة")
-            return
+            return "📭 لا توجد فرص جديدة"
 
-        recent = jobs[:8]
-        message_lines = [f"📊 آخر {len(recent)} فرصة:\n"]
+        recent = jobs[:10]
+        message_lines = [f"{title_prefix} {len(recent)} فرصة:\n"]
 
         for i, job in enumerate(recent, 1):
             url = job.get("url", "")
@@ -68,7 +65,16 @@ class TelegramBot:
                 ""
             ])
 
-        message = "\n".join(message_lines)
+        return "\n".join(message_lines)
+
+    def get_jobs(self, update: Update, context: CallbackContext):
+        jobs = self.db.get_new_jobs(limit=10)
+
+        if not jobs:
+            update.message.reply_text("📭 لا توجد فرص جديدة")
+            return
+
+        message = self.build_jobs_message(jobs, title_prefix="📊 آخر")
 
         keyboard = [[InlineKeyboardButton("🔄 تحديث", callback_data="refresh_jobs")]]
         reply_markup = InlineKeyboardMarkup(keyboard)
@@ -84,34 +90,19 @@ class TelegramBot:
         query.answer()
 
         if query.data == "refresh_jobs":
-            jobs = self.db.get_new_jobs()
+            jobs = self.db.get_new_jobs(limit=10)
 
             if not jobs:
                 query.edit_message_text("📭 لا توجد فرص جديدة")
                 return
 
-            recent = jobs[:8]
-            lines = [f"📊 محدث - {len(recent)} فرصة:\n"]
-
-            for i, job in enumerate(recent, 1):
-                title = job.get("title", "بدون عنوان")
-                price = job.get("price", "غير محدد")
-                platform = job.get("platform", "unknown").replace("_", " ").title()
-                url = job.get("url", "")
-
-                lines.extend([
-                    f"{i}. {title}",
-                    f"💰 {price}",
-                    f"🌐 {platform}",
-                    f"🔗 {url}",
-                    ""
-                ])
+            message = self.build_jobs_message(jobs, title_prefix="📊 محدث - آخر")
 
             keyboard = [[InlineKeyboardButton("🔄 تحديث", callback_data="refresh_jobs")]]
             reply_markup = InlineKeyboardMarkup(keyboard)
 
             query.edit_message_text(
-                text="\n".join(lines),
+                text=message,
                 reply_markup=reply_markup,
                 disable_web_page_preview=False
             )
@@ -129,8 +120,10 @@ class TelegramBot:
 ✅ تحليل بيانات
 ✅ Web Scraping / سحب بيانات
 
-/jobs - آخر الفرص
+الأوامر:
+/jobs - آخر 10 فرص
 /start - تفعيل الإشعارات التلقائية
+/help - المساعدة
         """
         update.message.reply_text(help_text)
 
@@ -139,17 +132,20 @@ class TelegramBot:
         url = job.get("url", "")
         price = job.get("price", "غير محدد")
         platform = job.get("platform", "unknown").replace("_", " ").title()
+        posted_date = job.get("posted_date", "")[:16]
 
         return (
             f"🚨 فرصة جديدة نزلت!\n\n"
             f"📌 {title}\n"
             f"💰 {price}\n"
             f"🌐 {platform}\n"
+            f"📅 {posted_date}\n"
             f"🔗 {url}"
         )
 
     def notify_subscribers(self, job: Dict):
         subscribers = self.db.get_subscribers()
+
         if not subscribers:
             logger.info("لا يوجد مشتركين حالياً لتلقي الإشعارات")
             return
