@@ -1,4 +1,3 @@
-import os
 import pytz
 from dotenv import load_dotenv
 import logging
@@ -24,9 +23,9 @@ class JobsBot:
         self.bot = TelegramBot(TELEGRAM_TOKEN, self.db)
 
         self.scrapers = {
-            'mostaql': MostaqlScraper(),
-            'khamsat_requests': KhamsatScraper(),
-            'upwork': UpworkScraper()
+            "mostaql": MostaqlScraper(),
+            "khamsat_requests": KhamsatScraper(),
+            "upwork": UpworkScraper()
         }
 
     def scrape_all(self):
@@ -43,9 +42,10 @@ class JobsBot:
                     if self.db.save_job(name, job):
                         total_new += 1
                         logger.info(f"✅ جديد: {job['title'][:50]}...")
-                        
-                        # 🔔 إرسال إشعار (اختياري)
-                        # self.bot.send_notification(YOUR_CHAT_ID, job)
+
+                        # إرسال إشعار فوري لكل المشتركين
+                        job["platform"] = name
+                        self.bot.notify_subscribers(job)
 
                     else:
                         logger.info(f"⏭️ مكرر: {job['title'][:30]}")
@@ -68,17 +68,17 @@ class JobsBot:
     def run(self):
         logger.info("🚀 بدء البوت...")
 
-        # تشغيل السكرايب أول مرة
+        # أول تشغيل
         self.scrape_all()
 
-        # ⏱️ جدولة
+        # الجدولة
         scheduler = BackgroundScheduler(timezone=pytz.utc)
         scheduler.add_job(self.scrape_all, 'interval', minutes=int(SCRAPE_INTERVAL))
         scheduler.start()
 
-        logger.info("🤖 البوت شغال - استخدمي /jobs")
+        logger.info("🤖 البوت شغال - استخدمي /start لتفعيل الإشعارات و /jobs لعرض آخر الفرص")
 
-        # ✅ تشغيل التليجرام (ده الصح في v13)
+        # تشغيل التليجرام
         self.bot.run()
 
 
