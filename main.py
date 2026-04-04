@@ -13,7 +13,10 @@ from UpworkScraper import UpworkScraper
 
 load_dotenv()
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
 logger = logging.getLogger(__name__)
 
 
@@ -25,58 +28,66 @@ class JobsBot:
         self.scrapers = {
             "mostaql": MostaqlScraper(),
             "khamsat_requests": KhamsatScraper(),
-            "upwork": UpworkScraper()
+            "upwork": UpworkScraper(),
         }
 
     def scrape_all(self):
-        logger.info("=" * 60)
+        logger.info("=" * 70)
         logger.info("🔍 بدء البحث في كل المواقع...")
         total_new = 0
 
         for name, scraper in self.scrapers.items():
             try:
-                logger.info(f"🌐 فحص: {name}")
+                logger.info(f"🌐 فحص المصدر: {name}")
                 jobs = scraper.search_jobs()
-                logger.info(f"📡 {name}: وجد {len(jobs)} نتيجة")
+
+                if jobs is None:
+                    jobs = []
+
+                logger.info(f"📡 {name}: عدد النتائج الراجعة من السكريبر = {len(jobs)}")
 
                 for job in jobs:
                     try:
                         job["platform"] = name
 
-                        if self.db.save_job(name, job):
-                            total_new += 1
-                            logger.info(f"✅ جديد: {job['title'][:60]}")
+                        saved = self.db.save_job(name, job)
 
-                            # إرسال إشعار فوري للمشتركين
+                        if saved:
+                            total_new += 1
+                            logger.info(f"✅ تم حفظ مشروع جديد من {name}: {job.get('title', '')[:60]}")
                             self.bot.notify_subscribers(job)
                         else:
-                            logger.info(f"⏭️ مكرر: {job['title'][:60]}")
+                            logger.info(f"⏭️ مشروع مكرر أو لم يتم حفظه: {job.get('title', '')[:60]}")
 
                     except Exception as e:
-                        logger.error(f"❌ خطأ أثناء حفظ/إرسال مشروع من {name}: {e}")
+                        logger.error(f"❌ خطأ أثناء حفظ/إشعار مشروع من {name}: {e}")
 
             except Exception as e:
-                logger.error(f"❌ خطأ في {name}: {e}")
+                logger.error(f"❌ خطأ أثناء تشغيل scraper {name}: {e}")
 
-        logger.info(f"✅ إجمالي المشاريع الجديدة: {total_new}")
+        logger.info(f"✅ إجمالي المشاريع الجديدة المحفوظة = {total_new}")
         self.show_db_status()
 
     def show_db_status(self):
-        jobs = self.db.get_new_jobs(limit=10)
-        logger.info(f"📊 إجمالي آخر المشاريع في قاعدة البيانات: {len(jobs)}")
+        try:
+            jobs = self.db.get_new_jobs(limit=10)
+            logger.info(f"📊 عدد آخر الوظائف داخل قاعدة البيانات = {len(jobs)}")
 
-        for job in jobs[:3]:
-            logger.info(f"📋 {job.get('title', '')[:40]} <- {job.get('platform', '')}")
+            for job in jobs[:5]:
+                logger.info(f"📋 {job.get('platform', '')} | {job.get('title', '')[:50]}")
 
-        logger.info("=" * 60)
+        except Exception as e:
+            logger.error(f"❌ show_db_status error: {e}")
+
+        logger.info("=" * 70)
 
     def run(self):
         logger.info("🚀 بدء تشغيل البوت...")
 
-        # أول فحص عند التشغيل
+        # أول scrape
         self.scrape_all()
 
-        # جدولة الفحص كل عدد دقائق من config
+        # جدولة
         scheduler = BackgroundScheduler(timezone=pytz.utc)
         scheduler.add_job(
             self.scrape_all,
@@ -90,8 +101,8 @@ class JobsBot:
         logger.info("🤖 البوت شغال")
         logger.info("📌 استخدمي /start لتفعيل الإشعارات")
         logger.info("📌 استخدمي /jobs لعرض آخر 10 فرص")
+        logger.info("📌 استخدمي /test لاختبار الإرسال")
 
-        # تشغيل التليجرام
         self.bot.run()
 
 
