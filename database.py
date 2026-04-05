@@ -1,40 +1,43 @@
-import os
-from dotenv import load_dotenv
+import sqlite3
+import logging
+from typing import Dict, List
 
-load_dotenv()
+logger = logging.getLogger(__name__)
 
-TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "").strip()
+class JobsDatabase:
+    def __init__(self, db_name="jobs.db"):
+        self.db_name = db_name
+        self.create_tables()
 
-# عدد الثواني بين كل فحص
-SCRAPE_INTERVAL = int(os.getenv("SCRAPE_INTERVAL", "45"))
+    def connect(self):
+        conn = sqlite3.connect(self.db_name, timeout=30)
+        conn.row_factory = sqlite3.Row
+        return conn
 
-# عدد النتائج القصوى من كل موقع في كل دورة
-MAX_RESULTS_PER_SITE = int(os.getenv("MAX_RESULTS_PER_SITE", "10"))
+    def create_tables(self):
+        conn = self.connect()
+        cur = conn.cursor()
 
-# timeout للطلبات
-REQUEST_TIMEOUT = int(os.getenv("REQUEST_TIMEOUT", "20"))
+        cur.execute("""
+        CREATE TABLE IF NOT EXISTS jobs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            platform TEXT,
+            title TEXT,
+            url TEXT UNIQUE,
+            price TEXT,
+            description TEXT,
+            posted_date TEXT,
+            scraped_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        """)
 
-# الكلمات المفتاحية
-DEFAULT_KEYWORDS = [
-    "excel", "اكسل",
-    "power bi", "powerbi",
-    "dashboard", "dash board", "داشبورد", "داش بورد",
-    "data analysis", "data analyst", "تحليل بيانات", "تحليل", "بيانات",
-    "web scraping", "scraping", "scraper", "سحب بيانات", "استخراج بيانات",
-    "data entry", "تنظيف بيانات", "cleaning data",
-    "sql", "python", "automation", "etl", "report", "reports", "تقارير"
-]
+        cur.execute("""
+        CREATE TABLE IF NOT EXISTS subscribers (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            chat_id TEXT UNIQUE,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        """)
 
-
-def load_keywords(file_path: str = "keywords.txt"):
-    if not os.path.exists(file_path):
-        return DEFAULT_KEYWORDS
-
-    keywords = []
-    with open(file_path, "r", encoding="utf-8") as f:
-        for line in f:
-            kw = line.strip()
-            if kw:
-                keywords.append(kw)
-
-    return keywords if keywords else DEFAULT_KEYWORDS
+        conn.commit()
+        conn.close()
