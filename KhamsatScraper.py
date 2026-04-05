@@ -1,13 +1,13 @@
 import requests
 from bs4 import BeautifulSoup
 import re
+import logging
 import time
 import random
-import logging
 from typing import List, Dict
 from urllib.parse import urlparse
 
-from config import REQUEST_TIMEOUT, MAX_RESULTS_PER_SITE, load_keywords
+from config import KEYWORDS, MAX_RESULTS_PER_SITE
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +26,6 @@ class KhamsatScraper:
             "Connection": "keep-alive",
             "Upgrade-Insecure-Requests": "1",
         })
-        self.keywords = load_keywords()
 
     def normalize_text(self, text: str) -> str:
         if not text:
@@ -39,7 +38,7 @@ class KhamsatScraper:
 
     def is_relevant(self, text: str) -> bool:
         text = self.normalize_text(text)
-        return any(self.normalize_text(k) in text for k in self.keywords)
+        return any(self.normalize_text(k) in text for k in KEYWORDS)
 
     def fix_khamsat_url(self, href: str) -> str:
         if not href:
@@ -61,16 +60,16 @@ class KhamsatScraper:
         }
 
         try:
-            time.sleep(random.uniform(0.8, 1.4))
-            response = self.session.get(url, timeout=REQUEST_TIMEOUT)
+            time.sleep(random.uniform(0.8, 1.5))
+            response = self.session.get(url, timeout=20)
             response.raise_for_status()
 
             soup = BeautifulSoup(response.text, "html.parser")
 
-            possible_blocks = soup.find_all(["article", "section", "div", "p"])
             best_text = ""
+            blocks = soup.find_all(["article", "section", "div", "p"])
 
-            for block in possible_blocks:
+            for block in blocks:
                 txt = block.get_text(" ", strip=True)
                 if len(txt) > len(best_text):
                     best_text = txt
@@ -87,11 +86,10 @@ class KhamsatScraper:
 
         try:
             logger.info("🔍 البحث في خمسات...")
-            response = self.session.get(self.REQUESTS_URL, timeout=REQUEST_TIMEOUT)
+            response = self.session.get(self.REQUESTS_URL, timeout=20)
             response.raise_for_status()
 
             soup = BeautifulSoup(response.text, "html.parser")
-
             links = soup.find_all("a", href=re.compile(r"^/community/requests/\d+"))
             seen = set()
 
@@ -121,21 +119,22 @@ class KhamsatScraper:
                     if not self.is_relevant(full_text):
                         continue
 
-                    jobs.append({
+                    job = {
                         "title": f"🆕 طلب خمسات: {title[:120]}",
                         "url": fixed_url,
                         "price": "طلب مفتوح",
                         "description": details.get("description", "")[:500],
                         "posted_date": time.strftime("%Y-%m-%d %H:%M")
-                    })
+                    }
 
-                    logger.info(f"✅ مطابق من خمسات: {title[:70]}")
+                    jobs.append(job)
+                    logger.info(f"✅ مطابق من خمسات: {title[:60]}")
 
                     if len(jobs) >= MAX_RESULTS_PER_SITE:
                         break
 
                 except Exception as e:
-                    logger.warning(f"تخطي طلب من خمسات بسبب خطأ: {e}")
+                    logger.warning(f"تخطي طلب خمسات بسبب خطأ: {e}")
                     continue
 
         except Exception as e:
