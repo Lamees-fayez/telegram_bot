@@ -5,6 +5,9 @@ on:
     - cron: "*/5 * * * *"
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   run-script:
     runs-on: ubuntu-latest
@@ -12,6 +15,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -28,8 +33,22 @@ jobs:
           python -m playwright install chromium
           python -m playwright install-deps chromium
 
+      - name: Ensure state file exists
+        run: |
+          if [ ! -f jobs_state.json ]; then
+            echo "[]" > jobs_state.json
+          fi
+
       - name: Run Bot
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: python main.py
+
+      - name: Commit state file
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add jobs_state.json
+          git commit -m "update jobs state" || echo "No changes to commit"
+          git push
