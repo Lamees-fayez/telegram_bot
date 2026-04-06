@@ -5,7 +5,7 @@ import time
 import random
 import logging
 from typing import List, Dict
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse
 
 from config import MAX_RESULTS_PER_SITE
 
@@ -91,9 +91,16 @@ class MostaqlScraper:
             return self.PROJECTS_URL
         return urljoin(self.BASE_URL, href)
 
-    def extract_project_id(self, href: str) -> int:
+    def canonicalize_url(self, url: str) -> str:
+        if not url:
+            return ""
+        parsed = urlparse(url)
+        clean_url = f"{parsed.scheme}://{parsed.netloc}{parsed.path}"
+        return clean_url.rstrip("/")
+
+    def extract_project_id(self, href: str) -> str:
         match = re.search(r"/project/(\d+)", href or "")
-        return int(match.group(1)) if match else 0
+        return match.group(1) if match else ""
 
     def extract_price_from_text(self, text: str) -> str:
         if not text:
@@ -154,7 +161,7 @@ class MostaqlScraper:
 
             soup = BeautifulSoup(response.text, "html.parser")
             links = soup.find_all("a", href=re.compile(r"/project/\d+"))
-            seen = set()
+            seen_ids = set()
 
             logger.info(f"📄 {page_url} | raw links found = {len(links)}")
 
@@ -164,10 +171,15 @@ class MostaqlScraper:
                     if not href:
                         continue
 
-                    full_url = self.fix_url(href)
-                    if full_url in seen:
+                    full_url = self.canonicalize_url(self.fix_url(href))
+                    project_id = self.extract_project_id(full_url)
+
+                    if not project_id:
                         continue
-                    seen.add(full_url)
+
+                    if project_id in seen_ids:
+                        continue
+                    seen_ids.add(project_id)
 
                     title = (
                         link.get_text(" ", strip=True)
@@ -190,10 +202,8 @@ class MostaqlScraper:
                     if len(title) < 5:
                         continue
 
-                    project_id = self.extract_project_id(href)
-
                     projects.append({
-                        "id": project_id,
+                        "job_id": project_id,
                         "title": title,
                         "url": full_url,
                         "card_text": card_text,
@@ -230,15 +240,16 @@ class MostaqlScraper:
 
         unique_map = {}
         for item in collected:
-            if item["url"] not in unique_map:
-                unique_map[item["url"]] = item
+            job_id = item.get("job_id")
+            if job_id and job_id not in unique_map:
+                unique_map[job_id] = item
 
         all_projects = list(unique_map.values())
-        all_projects.sort(key=lambda x: x["id"], reverse=True)
+        all_projects.sort(key=lambda x: int(x.get("job_id", 0)), reverse=True)
 
         logger.info(f"📌 total unique projects = {len(all_projects)}")
         for item in all_projects[:5]:
-            logger.info(f"🧪 sample project: title={item.get('title')} | url={item.get('url')}")
+            logger.info(f"🧪 sample project: job_id={item.get('job_id')} | title={item.get('title')} | url={item.get('url')}")
 
         matched_jobs = []
 
@@ -257,8 +268,10 @@ class MostaqlScraper:
                 description = details.get("description", "")
 
                 job = {
+                    "job_id": item["job_id"],
                     "title": f"🆕 مشروع مستقل: {item['title'][:120]}",
                     "url": item["url"],
+                    "link": item["url"],
                     "price": price,
                     "description": description[:500],
                     "posted_date": time.strftime("%Y-%m-%d %H:%M")
