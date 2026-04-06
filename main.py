@@ -1,4 +1,5 @@
 import os
+import json
 import time
 import logging
 from dotenv import load_dotenv
@@ -36,6 +37,36 @@ class JobsBot:
             "khamsat_requests": KhamsatScraper(),
         }
 
+        self.state_file = "jobs_state.json"
+        self.sent_jobs = self.load_state()
+
+    def load_state(self):
+        try:
+            if os.path.exists(self.state_file):
+                with open(self.state_file, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    if isinstance(data, list):
+                        return set(data)
+        except Exception as e:
+            logger.error(f"load_state error: {e}")
+        return set()
+
+    def save_state(self):
+        try:
+            with open(self.state_file, "w", encoding="utf-8") as f:
+                json.dump(sorted(list(self.sent_jobs)), f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            logger.error(f"save_state error: {e}")
+
+    def build_unique_key(self, platform: str, job: dict) -> str:
+        job_id = (job.get("job_id") or "").strip()
+        url = (job.get("url") or job.get("link") or "").strip()
+
+        if job_id:
+            return f"{platform}:{job_id}"
+
+        return f"{platform}:{url}"
+
     def scrape_all(self):
         logger.info("=" * 80)
         logger.info("بدء البحث في كل المواقع...")
@@ -45,7 +76,6 @@ class JobsBot:
             logger.info(f"عدد المشتركين الحالي = {len(subs)}")
         except Exception as e:
             logger.error(f"خطأ في قراءة المشتركين: {e}")
-            subs = []
 
         total_new = 0
 
@@ -62,14 +92,29 @@ class JobsBot:
                         if not job.get("url") and job.get("link"):
                             job["url"] = job["link"]
 
+                        unique_key = self.build_unique_key(name, job)
+
+                        if not unique_key or unique_key.endswith(":"):
+                            logger.warning(f"تم تخطي وظيفة بدون مفتاح فريد: {job.get('title', '')[:60]}")
+                            continue
+
+                        if unique_key in self.sent_jobs:
+                            logger.info(f"مكرر (state): {job.get('title', '')[:70]}")
+                            continue
+
                         saved = self.db.save_job(name, job)
 
                         if saved:
                             total_new += 1
+                            self.sent_jobs.add(unique_key)
+                            self.save_state()
+
                             logger.info(f"تم حفظ فرصة جديدة من {name}: {job.get('title', '')[:70]}")
                             self.bot.notify_subscribers(job)
                         else:
-                            logger.info(f"فرصة مكررة: {job.get('title', '')[:70]}")
+                            logger.info(f"فرصة مكررة في DB: {job.get('title', '')[:70]}")
+                            self.sent_jobs.add(unique_key)
+                            self.save_state()
 
                     except Exception as e:
                         logger.error(f"خطأ أثناء حفظ/إرسال فرصة من {name}: {e}")
