@@ -28,8 +28,9 @@ class JobsDatabase:
             CREATE TABLE IF NOT EXISTS jobs (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 platform TEXT NOT NULL,
+                job_id TEXT NOT NULL,
                 title TEXT,
-                url TEXT NOT NULL UNIQUE,
+                url TEXT NOT NULL,
                 price TEXT,
                 description TEXT,
                 posted_date TEXT,
@@ -43,6 +44,11 @@ class JobsDatabase:
                 chat_id TEXT NOT NULL UNIQUE,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
+            """)
+
+            cur.execute("""
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_jobs_unique_platform_jobid
+            ON jobs(platform, job_id)
             """)
 
             cur.execute("CREATE INDEX IF NOT EXISTS idx_jobs_platform ON jobs(platform)")
@@ -62,6 +68,7 @@ class JobsDatabase:
             conn = self.connect()
             cur = conn.cursor()
 
+            job_id = (job.get("job_id") or "").strip()
             url = (job.get("url") or job.get("link") or "").strip()
             title = (job.get("title") or "").strip()
             price = (job.get("price") or "").strip()
@@ -72,11 +79,16 @@ class JobsDatabase:
                 logger.warning(f"تم تخطي وظيفة بدون url: {title[:60]}")
                 return False
 
+            if not job_id:
+                logger.warning(f"تم تخطي وظيفة بدون job_id: {title[:60]}")
+                return False
+
             cur.execute("""
-            INSERT INTO jobs (platform, title, url, price, description, posted_date)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO jobs (platform, job_id, title, url, price, description, posted_date)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
             """, (
                 platform,
+                job_id,
                 title,
                 url,
                 price,
@@ -96,12 +108,15 @@ class JobsDatabase:
             if conn:
                 conn.close()
 
-    def job_exists(self, url: str) -> bool:
+    def job_exists(self, platform: str, job_id: str) -> bool:
         conn = None
         try:
             conn = self.connect()
             cur = conn.cursor()
-            cur.execute("SELECT 1 FROM jobs WHERE url = ? LIMIT 1", (url,))
+            cur.execute(
+                "SELECT 1 FROM jobs WHERE platform = ? AND job_id = ? LIMIT 1",
+                (platform, job_id)
+            )
             return cur.fetchone() is not None
         except Exception as e:
             logger.error(f"job_exists error: {e}")
@@ -117,7 +132,7 @@ class JobsDatabase:
             cur = conn.cursor()
 
             cur.execute("""
-            SELECT platform, title, url, price, description, posted_date, scraped_date
+            SELECT platform, job_id, title, url, price, description, posted_date, scraped_date
             FROM jobs
             ORDER BY id DESC
             LIMIT ?
