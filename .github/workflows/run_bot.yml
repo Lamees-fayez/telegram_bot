@@ -23,12 +23,17 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      - name: Install Playwright browsers
+        run: |
+          python -m playwright install chromium
+          python -m playwright install-deps chromium
+
       - name: Check environment variables
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
-          python -c "import os; print('TOKEN FOUND' if os.getenv('TELEGRAM_BOT_TOKEN') else 'TOKEN MISSING'); print('CHAT ID FOUND' if os.getenv('TELEGRAM_CHAT_ID') else 'CHAT ID MISSING')"
+          python -c "import os; token=os.getenv('TELEGRAM_BOT_TOKEN','').strip(); chat=os.getenv('TELEGRAM_CHAT_ID','').strip(); print('TOKEN FOUND' if token else 'TOKEN MISSING'); print('CHAT ID FOUND' if chat else 'CHAT ID MISSING')"
 
       - name: Run bot
         env:
