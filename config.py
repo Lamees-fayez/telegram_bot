@@ -4,10 +4,13 @@ from dotenv import load_dotenv
 load_dotenv()
 
 TELEGRAM_TOKEN = (
-    os.getenv("TELEGRAM_TOKEN")
+    os.getenv("TELEGRAM_BOT_TOKEN")
+    or os.getenv("TELEGRAM_TOKEN")
     or os.getenv("BOT_TOKEN")
     or ""
 ).strip()
+
+TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "").strip()
 
 SCRAPE_INTERVAL_SECONDS = int(os.getenv("SCRAPE_INTERVAL_SECONDS", "45"))
 MAX_RESULTS_PER_SITE = int(os.getenv("MAX_RESULTS_PER_SITE", "10"))
@@ -34,4 +37,4 @@ KEYWORDS = [
 ]
 
 if not TELEGRAM_TOKEN:
-    raise ValueError("TELEGRAM_TOKEN is missing. Please set it in .env")
+    raise ValueError("TELEGRAM_BOT_TOKEN is missing. Please set it in GitHub Secrets or .env")
