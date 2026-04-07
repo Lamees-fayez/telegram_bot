@@ -28,45 +28,127 @@ class MostaqlScraper:
         })
 
         self.weighted_keywords = {
-            "excel": 4,
-            "اكسل": 4,
-            "power bi": 4,
-            "powerbi": 4,
-            "dashboard": 4,
-            "dash board": 4,
-            "داشبورد": 4,
-            "داش بورد": 4,
-            "web scraping": 4,
+            # Excel / Sheets
+            "excel": 5,
+            "microsoft excel": 5,
+            "spreadsheet": 4,
+            "spreadsheets": 4,
+            "google sheets": 4,
+            "google sheet": 4,
+            "sheet": 2,
+            "sheets": 2,
+            "اكسل": 5,
+            "إكسل": 5,
+            "اكسيل": 5,
+            "شيت": 2,
+            "شيتات": 2,
+            "جوجل شيت": 4,
+            "جوجل شيتس": 4,
+
+            # Power BI / Dashboard
+            "power bi": 5,
+            "powerbi": 5,
+            "dashboard": 5,
+            "dash board": 5,
+            "interactive dashboard": 5,
+            "data visualization": 4,
+            "visualization": 3,
+            "لوحة تحكم": 5,
+            "لوحه تحكم": 5,
+            "داشبورد": 5,
+            "داش بورد": 5,
+            "تقارير تفاعلية": 4,
+            "تقرير تفاعلي": 4,
+
+            # Data analysis / reporting
+            "data analysis": 4,
+            "data analytics": 4,
+            "data analyst": 3,
+            "eda": 4,
+            "analysis": 2,
+            "report": 2,
+            "reports": 2,
+            "reporting": 2,
+            "kpi": 3,
+            "kpis": 3,
+            "تحليل بيانات": 4,
+            "تحليل الداتا": 4,
+            "تحليل": 2,
+            "تقارير": 2,
+            "تقرير": 2,
+            "مؤشرات الاداء": 3,
+            "مؤشر اداء": 3,
+
+            # Data work / ETL
+            "etl": 3,
+            "data cleaning": 3,
+            "cleaning data": 3,
+            "data processing": 3,
+            "power query": 4,
+            "sql": 2,
+            "python": 2,
+            "database": 2,
+            "تنظيف بيانات": 3,
+            "معالجة بيانات": 3,
+            "باور كويري": 4,
+            "قاعدة بيانات": 2,
+
+            # Scraping / extraction
+            "web scraping": 5,
             "scraping": 4,
             "scraper": 4,
-            "سحب بيانات": 4,
-            "استخراج بيانات": 4,
-            "data entry": 3,
-            "تنظيف بيانات": 3,
-            "cleaning data": 3,
-            "etl": 3,
-            "python": 1,
-            "sql": 1,
-            "analysis": 1,
-            "data analysis": 2,
-            "تحليل بيانات": 2,
-            "report": 1,
-            "reports": 1,
-            "تقارير": 1,
+            "data extraction": 4,
+            "crawl": 3,
+            "crawler": 3,
+            "سحب بيانات": 5,
+            "استخراج بيانات": 5,
+            "جمع بيانات": 4,
+            "ويب سكرابينج": 5,
+            "سكرابينج": 4,
+
+            # Related business/data tools
+            "automation": 2,
+            "automated report": 3,
+            "api": 2,
+            "csv": 2,
+            "xlsx": 2,
+            "excel dashboard": 5,
+            "power bi dashboard": 5,
+            "dashboard excel": 5,
         }
 
-        self.min_score = 4
+        self.strong_keywords = {
+            "excel", "microsoft excel", "اكسل", "إكسل", "اكسيل",
+            "power bi", "powerbi",
+            "dashboard", "dash board", "داشبورد", "داش بورد",
+            "لوحة تحكم", "لوحه تحكم",
+            "web scraping", "scraping", "data extraction",
+            "سحب بيانات", "استخراج بيانات", "جمع بيانات",
+            "تحليل بيانات", "data analysis",
+            "google sheets", "جوجل شيت", "power query", "باور كويري"
+        }
+
+        self.min_score = 3
 
     def normalize_text(self, text: str) -> str:
         if not text:
             return ""
 
         text = text.lower().strip()
-        text = text.replace("أ", "ا").replace("إ", "ا").replace("آ", "ا")
-        text = text.replace("ة", "ه")
-        text = text.replace("ى", "ي")
+
+        arabic_map = {
+            "أ": "ا", "إ": "ا", "آ": "ا",
+            "ة": "ه", "ى": "ي", "ؤ": "و", "ئ": "ي"
+        }
+        for old, new in arabic_map.items():
+            text = text.replace(old, new)
+
+        # remove Arabic diacritics
+        text = re.sub(r"[\u0617-\u061A\u064B-\u0652]", "", text)
+        text = re.sub(r"[^\w\s\+\#]", " ", text)
         text = re.sub(r"\s+", " ", text)
-        return text
+
+        return text.strip()
 
     def score_text(self, text: str):
         text = self.normalize_text(text)
@@ -81,10 +163,23 @@ class MostaqlScraper:
 
         return score, matched
 
-    def is_relevant(self, text: str) -> bool:
-        score, matched = self.score_text(text)
-        logger.info(f"🔎 Mostaql matched keywords: {matched} | score={score}")
-        return score >= self.min_score
+    def is_relevant(self, title: str, card_text: str, description: str):
+        full_text = self.normalize_text(f"{title} {card_text} {description}")
+        score, matched = self.score_text(full_text)
+
+        normalized_matched = [self.normalize_text(x) for x in matched]
+        strong_hit = any(self.normalize_text(k) in normalized_matched for k in self.strong_keywords)
+
+        # قواعد مرنة أفضل:
+        # 1) لو فيه كلمة قوية -> اقبلي
+        # 2) أو لو مجموع النقاط كفاية
+        # 3) أو لو فيه كلمتين على الأقل من الكلمات المهمة
+        is_ok = strong_hit or score >= self.min_score or len(set(normalized_matched)) >= 2
+
+        logger.info(
+            f"🔎 Mostaql match check | strong_hit={strong_hit} | score={score} | matched={matched}"
+        )
+        return is_ok, score, matched
 
     def fix_url(self, href: str) -> str:
         if not href:
@@ -120,6 +215,47 @@ class MostaqlScraper:
 
         return "غير محدد"
 
+    def extract_best_description(self, soup: BeautifulSoup) -> str:
+        candidates = []
+
+        selectors = [
+            "article",
+            "main",
+            "section",
+            "div",
+            "p",
+        ]
+
+        for tag_name in selectors:
+            for block in soup.find_all(tag_name):
+                txt = block.get_text(" ", strip=True)
+                txt = re.sub(r"\s+", " ", txt).strip()
+
+                if len(txt) < 80:
+                    continue
+
+                # استبعاد بلوكات واضحة إنها Noise
+                bad_words = [
+                    "مشاريع مشابهة", "أضف عرضك الآن", "تسجيل الدخول",
+                    "حسابي", "الرئيسية", "المساعدة", "سياسة الخصوصية"
+                ]
+                if any(word in txt for word in bad_words):
+                    continue
+
+                candidates.append(txt)
+
+        if not candidates:
+            return ""
+
+        # ناخد أفضل وصف بطول معقول بدل أطول شيء أعمى
+        candidates.sort(key=lambda x: len(x), reverse=True)
+
+        for txt in candidates:
+            if 120 <= len(txt) <= 2500:
+                return txt[:1500]
+
+        return candidates[0][:1500]
+
     def get_project_details(self, url: str) -> Dict:
         result = {
             "description": "",
@@ -127,7 +263,7 @@ class MostaqlScraper:
         }
 
         try:
-            time.sleep(random.uniform(0.8, 1.5))
+            time.sleep(random.uniform(0.7, 1.3))
             response = self.session.get(url, timeout=20)
             response.raise_for_status()
 
@@ -135,17 +271,7 @@ class MostaqlScraper:
             page_text = soup.get_text(" ", strip=True)
 
             result["price"] = self.extract_price_from_text(page_text)
-
-            best_text = ""
-            blocks = soup.find_all(["p", "div", "section", "article"])
-
-            for block in blocks:
-                block_text = block.get_text(" ", strip=True)
-                if len(block_text) > len(best_text):
-                    best_text = block_text
-
-            if best_text:
-                result["description"] = best_text[:1500]
+            result["description"] = self.extract_best_description(soup)
 
         except Exception as e:
             logger.warning(f"تعذر قراءة تفاصيل المشروع: {url} | {e}")
@@ -174,10 +300,7 @@ class MostaqlScraper:
                     full_url = self.canonicalize_url(self.fix_url(href))
                     project_id = self.extract_project_id(full_url)
 
-                    if not project_id:
-                        continue
-
-                    if project_id in seen_ids:
+                    if not project_id or project_id in seen_ids:
                         continue
                     seen_ids.add(project_id)
 
@@ -192,10 +315,8 @@ class MostaqlScraper:
                     card_text = card.get_text(" ", strip=True) if card else ""
                     card_price = self.extract_price_from_text(card_text) if card_text else "غير محدد"
 
-                    if len(title) < 5:
-                        h_tag = None
-                        if card:
-                            h_tag = card.find(["h1", "h2", "h3", "h4"])
+                    if len(title) < 5 and card:
+                        h_tag = card.find(["h1", "h2", "h3", "h4"])
                         if h_tag:
                             title = h_tag.get_text(" ", strip=True)
 
@@ -227,6 +348,7 @@ class MostaqlScraper:
             self.PROJECTS_URL,
             f"{self.PROJECTS_URL}?page=2",
             f"{self.PROJECTS_URL}?page=3",
+            f"{self.PROJECTS_URL}?page=4",
         ]
 
         for page_url in page_urls:
@@ -234,7 +356,7 @@ class MostaqlScraper:
             page_projects = self.collect_projects_from_page(page_url)
             logger.info(f"📌 تم العثور على {len(page_projects)} مشروع مبدئي")
             collected.extend(page_projects)
-            time.sleep(random.uniform(1, 2))
+            time.sleep(random.uniform(0.8, 1.5))
 
         logger.info(f"📌 total collected before dedupe = {len(collected)}")
 
@@ -249,23 +371,29 @@ class MostaqlScraper:
 
         logger.info(f"📌 total unique projects = {len(all_projects)}")
         for item in all_projects[:5]:
-            logger.info(f"🧪 sample project: job_id={item.get('job_id')} | title={item.get('title')} | url={item.get('url')}")
+            logger.info(
+                f"🧪 sample project: job_id={item.get('job_id')} | title={item.get('title')} | url={item.get('url')}"
+            )
 
         matched_jobs = []
 
         for item in all_projects:
             try:
                 details = self.get_project_details(item["url"])
-                full_text = f"{item.get('title', '')} {item.get('card_text', '')} {details.get('description', '')}"
-
-                score, matched = self.score_text(full_text)
-
-                if score < self.min_score:
-                    logger.info(f"⏭️ not matched: {item.get('title', '')[:60]} | score={score} | matched={matched}")
-                    continue
-
-                price = details.get("price") or item.get("card_price") or "غير محدد"
                 description = details.get("description", "")
+                price = details.get("price") or item.get("card_price") or "غير محدد"
+
+                ok, score, matched = self.is_relevant(
+                    title=item.get("title", ""),
+                    card_text=item.get("card_text", ""),
+                    description=description
+                )
+
+                if not ok:
+                    logger.info(
+                        f"⏭️ not matched: {item.get('title', '')[:70]} | score={score} | matched={matched}"
+                    )
+                    continue
 
                 job = {
                     "job_id": item["job_id"],
@@ -278,7 +406,9 @@ class MostaqlScraper:
                 }
 
                 matched_jobs.append(job)
-                logger.info(f"✅ مطابق من مستقل: {item['title'][:70]} | score={score} | matched={matched}")
+                logger.info(
+                    f"✅ مطابق من مستقل: {item['title'][:70]} | score={score} | matched={matched}"
+                )
 
                 if len(matched_jobs) >= MAX_RESULTS_PER_SITE:
                     break
