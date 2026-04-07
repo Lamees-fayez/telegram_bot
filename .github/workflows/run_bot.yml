@@ -1,0 +1,43 @@
+name: Run Telegram Jobs Bot
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "*/5 * * * *"
+
+jobs:
+  run-bot:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Check environment variables
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          python -c "import os; print('TOKEN FOUND' if os.getenv('TELEGRAM_BOT_TOKEN') else 'TOKEN MISSING'); print('CHAT ID FOUND' if os.getenv('TELEGRAM_CHAT_ID') else 'CHAT ID MISSING')"
+
+      - name: Run bot
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          MAX_RESULTS_PER_SITE: "10"
+          REQUEST_TIMEOUT: "20"
+          SCRAPE_INTERVAL_SECONDS: "60"
+          HEADLESS: "true"
+          DEBUG: "true"
+        run: |
+          python main.py
