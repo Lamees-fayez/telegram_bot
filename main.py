@@ -11,18 +11,17 @@ from KhamsatScraper import KhamsatScraper
 
 load_dotenv()
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s"
+)
 logger = logging.getLogger(__name__)
 
 
 class JobsBot:
     def __init__(self):
         self.db = JobsDatabase()
-
-        self.bot = TelegramBot(
-            TELEGRAM_TOKEN,
-            self.db
-        )
+        self.bot = TelegramBot(TELEGRAM_TOKEN, self.db)
 
         self.scrapers = {
             "mostaql": MostaqlScraper(),
@@ -54,24 +53,37 @@ class JobsBot:
         return (job.get("url") or job.get("link") or "").strip()
 
     def run(self):
+        logger.info("===== BOT START =====")
+
         if not TELEGRAM_TOKEN:
-            raise ValueError("TELEGRAM_TOKEN missing")
+            raise ValueError("TELEGRAM_BOT_TOKEN missing")
 
-        # ✅ رسالة اختبار مباشرة للتأكد إن البوت يقدر يرسل
+        chat_id_raw = os.getenv("TELEGRAM_CHAT_ID", "").strip()
+
+        logger.info(f"Token exists: {'YES' if TELEGRAM_TOKEN else 'NO'}")
+        logger.info(f"Token prefix: {TELEGRAM_TOKEN[:10]}...")
+        logger.info(f"TELEGRAM_CHAT_ID raw: {chat_id_raw}")
+
+        # اختبار مباشر
         try:
-            test_chat_id = os.getenv("TELEGRAM_CHAT_ID", "").strip()
-            logger.info(f"test_chat_id = {test_chat_id}")
+            if not chat_id_raw:
+                raise ValueError("TELEGRAM_CHAT_ID is empty")
 
-            if test_chat_id:
-                self.bot.bot.send_message(
-                    chat_id=test_chat_id,
-                    text="✅ test from github actions"
-                )
-                logger.info("test message sent successfully")
-            else:
-                logger.warning("TELEGRAM_CHAT_ID not found")
+            chat_id = int(chat_id_raw)
+
+            me = self.bot.bot.get_me()
+            logger.info(f"Bot username: @{me.username}")
+            logger.info(f"Bot id: {me.id}")
+
+            self.bot.bot.send_message(
+                chat_id=chat_id,
+                text="✅ test from github actions"
+            )
+            logger.info("TEST MESSAGE SENT SUCCESSFULLY")
+
         except Exception as e:
-            logger.error(f"test send error: {e}")
+            logger.exception(f"TEST SEND FAILED: {e}")
+            raise
 
         total = 0
 
@@ -84,7 +96,6 @@ class JobsBot:
                 for job in jobs:
                     try:
                         job["platform"] = name
-
                         key = self.build_key(name, job)
 
                         if not key:
@@ -101,18 +112,18 @@ class JobsBot:
                         if saved:
                             self.sent_jobs.add(key)
                             self.save_state()
-
                             self.bot.notify_subscribers(job)
                             total += 1
                             logger.info(f"new job notified: {job.get('title', '')[:70]}")
 
                     except Exception as e:
-                        logger.error(f"job processing error in {name}: {e}")
+                        logger.exception(f"job processing error in {name}: {e}")
 
             except Exception as e:
-                logger.error(f"{name} scraper error: {e}")
+                logger.exception(f"{name} scraper error: {e}")
 
         logger.info(f"done. new jobs: {total}")
+        logger.info("===== BOT END =====")
 
 
 if __name__ == "__main__":
