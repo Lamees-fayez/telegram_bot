@@ -3,7 +3,7 @@ import json
 import logging
 from dotenv import load_dotenv
 
-from config import TELEGRAM_TOKEN, TELEGRAM_CHAT_ID
+from config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
 from database import JobsDatabase
 from telegram_bot import TelegramBot
 from MostaqlScraper import MostaqlScraper
