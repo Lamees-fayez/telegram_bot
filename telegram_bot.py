@@ -11,15 +11,13 @@ logger = logging.getLogger(__name__)
 
 
 class TelegramBot:
-    def __init__(self, token: str, db: JobsDatabase, polling_enabled: bool = False):
+    def __init__(self, token: str, db: JobsDatabase, polling_enabled: bool = True):
         self.token = token
         self.db = db
         self.polling_enabled = polling_enabled
 
-        # دايمًا يبقى عندنا Bot للإرسال المباشر
         self.bot = Bot(token=token)
 
-        # Updater يتعمل فقط لو محتاجين polling
         self.updater = None
         self.dispatcher = None
 
@@ -39,6 +37,10 @@ class TelegramBot:
         self.dispatcher.add_handler(CommandHandler("subscribers", self.subscribers_command))
         self.dispatcher.add_handler(CommandHandler("stop", self.stop_command))
         self.dispatcher.add_handler(CallbackQueryHandler(self.button_callback))
+        self.dispatcher.add_error_handler(self.error_handler)
+
+    def error_handler(self, update, context):
+        logger.error("Telegram update error", exc_info=context.error)
 
     def start_command(self, update: Update, context: CallbackContext):
         try:
@@ -46,26 +48,22 @@ class TelegramBot:
             self.db.add_subscriber(chat_id)
 
             text = (
-                "🎉 بوت فرص Excel & Power BI\n\n"
-                "تم تفعيل الإشعارات التلقائية عند نزول فرص جديدة ✅\n\n"
-                "الأوامر:\n"
+                "🎉 بوت فرص Excel و Power BI\n\n"
+                "تم تفعيل الإشعارات التلقائية بنجاح ✅\n\n"
+                "الأوامر المتاحة:\n"
                 "/jobs - آخر 10 فرص\n"
-                "/test - اختبار الإشعار\n"
+                "/test - اختبار الإرسال\n"
                 "/subscribers - عدد المشتركين\n"
                 "/stop - إلغاء الإشعارات\n"
-                "/help - مساعدة"
+                "/help - المساعدة"
             )
 
             update.message.reply_text(text)
 
-            self.bot.send_message(
-                chat_id=chat_id,
-                text="✅ تم تسجيلك في الإشعارات بنجاح. دي رسالة اختبار."
-            )
             logger.info(f"start_command ok for {chat_id}")
 
         except Exception as e:
-            logger.error(f"start_command error: {e}")
+            logger.error(f"start_command error: {e}", exc_info=True)
             if update.message:
                 update.message.reply_text(f"حدث خطأ أثناء التفعيل: {e}")
 
@@ -76,8 +74,9 @@ class TelegramBot:
             update.message.reply_text("✅ تم إلغاء الاشتراك في الإشعارات")
             logger.info(f"stop_command ok for {chat_id}")
         except Exception as e:
-            logger.error(f"stop_command error: {e}")
-            update.message.reply_text(f"حدث خطأ أثناء إلغاء الاشتراك: {e}")
+            logger.error(f"stop_command error: {e}", exc_info=True)
+            if update.message:
+                update.message.reply_text(f"حدث خطأ أثناء إلغاء الاشتراك: {e}")
 
     def build_jobs_message(self, jobs, title_prefix="📊 آخر"):
         if not jobs:
@@ -123,7 +122,7 @@ class TelegramBot:
             )
 
         except Exception as e:
-            logger.error(f"get_jobs error: {e}")
+            logger.error(f"get_jobs error: {e}", exc_info=True)
             update.message.reply_text(f"حدث خطأ أثناء جلب الوظائف: {e}")
 
     def button_callback(self, update: Update, context: CallbackContext):
@@ -149,8 +148,11 @@ class TelegramBot:
                 )
 
         except Exception as e:
-            logger.error(f"button_callback error: {e}")
-            query.edit_message_text(f"حدث خطأ أثناء التحديث: {e}")
+            logger.error(f"button_callback error: {e}", exc_info=True)
+            try:
+                query.edit_message_text(f"حدث خطأ أثناء التحديث: {e}")
+            except Exception:
+                pass
 
     def help_command(self, update: Update, context: CallbackContext):
         text = (
@@ -160,7 +162,7 @@ class TelegramBot:
             "الأوامر:\n"
             "/start - تفعيل الإشعارات\n"
             "/jobs - آخر 10 فرص\n"
-            "/test - اختبار الإشعار\n"
+            "/test - اختبار الإرسال\n"
             "/subscribers - عدد المشتركين\n"
             "/stop - إلغاء الإشعارات\n"
             "/help - المساعدة"
@@ -176,7 +178,7 @@ class TelegramBot:
             )
             logger.info(f"test_command sent to {chat_id}")
         except Exception as e:
-            logger.error(f"test_command error: {e}")
+            logger.error(f"test_command error: {e}", exc_info=True)
             update.message.reply_text(f"فشل إرسال رسالة الاختبار: {e}")
 
     def subscribers_command(self, update: Update, context: CallbackContext):
@@ -184,7 +186,7 @@ class TelegramBot:
             subscribers = self.db.get_subscribers()
             update.message.reply_text(f"👥 عدد المشتركين الحالي: {len(subscribers)}")
         except Exception as e:
-            logger.error(f"subscribers_command error: {e}")
+            logger.error(f"subscribers_command error: {e}", exc_info=True)
             update.message.reply_text(f"حدث خطأ: {e}")
 
     def format_job_message(self, job: Dict) -> str:
@@ -192,7 +194,7 @@ class TelegramBot:
         url = job.get("url") or job.get("link") or ""
         price = job.get("price", "غير محدد")
         platform = job.get("platform", "unknown").replace("_", " ").title()
-        posted_date = str(job.get("posted_date", ""))[:16]
+        posted_date = str(job.get("posted_date", job.get("scraped_date", "")))[:16]
 
         return (
             f"🚨 فرصة جديدة نزلت!\n\n"
@@ -206,7 +208,6 @@ class TelegramBot:
     def notify_subscribers(self, job: Dict):
         subscribers = self.db.get_subscribers()
 
-        # fallback اختياري لو مفيش subscribers في قاعدة البيانات
         fallback_chat_id = os.getenv("TELEGRAM_CHAT_ID", "").strip()
         if not subscribers and fallback_chat_id:
             try:
@@ -229,7 +230,7 @@ class TelegramBot:
                 )
                 logger.info(f"notification sent to {chat_id}")
             except Exception as e:
-                logger.error(f"notify error to {chat_id}: {e}")
+                logger.error(f"notify error to {chat_id}: {e}", exc_info=True)
 
     def run(self):
         if not self.polling_enabled or not self.updater:
@@ -237,5 +238,5 @@ class TelegramBot:
             return
 
         logger.info("Starting Telegram bot polling...")
-        self.updater.start_polling()
+        self.updater.start_polling(drop_pending_updates=True)
         self.updater.idle()
