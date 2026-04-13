@@ -19,7 +19,11 @@ class MostaqlScraper:
     def __init__(self):
         self.session = requests.Session()
         self.session.headers.update({
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/123.0.0.0 Safari/537.36"
+            ),
             "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
             "Accept-Language": "ar,en-US;q=0.9,en;q=0.8",
             "Referer": "https://mostaql.com/",
@@ -312,11 +316,11 @@ class MostaqlScraper:
                         continue
 
                     projects.append({
-                        "job_id": project_id,
-                        "title": title,
-                        "url": full_url,
-                        "card_text": card_text,
-                        "card_price": card_price
+                        "job_id": str(project_id),
+                        "title": str(title),
+                        "url": str(full_url),
+                        "card_text": str(card_text),
+                        "card_price": str(card_price),
                     })
 
                 except Exception as e:
@@ -360,10 +364,6 @@ class MostaqlScraper:
         all_projects.sort(key=lambda x: int(x.get("job_id", 0)), reverse=True)
 
         logger.info(f"📌 total unique projects = {len(all_projects)}")
-        for item in all_projects[:5]:
-            logger.info(
-                f"🧪 sample project: job_id={item.get('job_id')} | title={item.get('title')} | url={item.get('url')}"
-            )
 
         matched_jobs = []
 
@@ -386,13 +386,14 @@ class MostaqlScraper:
                     continue
 
                 job = {
-                    "job_id": item["job_id"],
+                    "job_id": str(item["job_id"]),
                     "title": f"🆕 مشروع مستقل: {item['title'][:120]}",
-                    "url": item["url"],
-                    "link": item["url"],
-                    "price": price,
-                    "description": description[:500],
-                    "posted_date": time.strftime("%Y-%m-%d %H:%M")
+                    "url": str(item["url"]),
+                    "link": str(item["url"]),
+                    "price": str(price),
+                    "description": str(description[:500]),
+                    "posted_date": time.strftime("%Y-%m-%d %H:%M"),
+                    "platform": "mostaql"
                 }
 
                 matched_jobs.append(job)
