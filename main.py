@@ -1,59 +1,99 @@
 import os
 import time
 import logging
+from dotenv import load_dotenv
 
 from database import JobsDatabase
-from MostaqlScraper import MostaqlScraper
-from KhamsatScraper import KhamsatScraper
 from telegram_bot import TelegramBot
+from scrapers.mostaql_scraper import MostaqlScraper
+from scrapers.khamsat_scraper import KhamsatScraper
+from scrapers.nafethly_scraper import NafethlyScraper
+
+load_dotenv()
 
 logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(levelname)s:%(name)s:%(message)s"
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    level=logging.INFO
 )
+
 logger = logging.getLogger(__name__)
 
 
-def run_bot():
-    bot_token = os.getenv("TELEGRAM_BOT_TOKEN")
-    chat_id = os.getenv("TELEGRAM_CHAT_ID")
+CHECK_INTERVAL = int(os.getenv("CHECK_INTERVAL", 60))
 
-    if not bot_token:
-        raise ValueError("TELEGRAM_BOT_TOKEN is missing in environment variables")
 
+def collect_jobs():
+    all_jobs = []
+
+    scrapers = [
+        ("مستقل", MostaqlScraper()),
+        ("خمسات", KhamsatScraper()),
+        ("نفذلي", NafethlyScraper()),
+    ]
+
+    for site_name, scraper in scrapers:
+        try:
+            logger.info(f"بدأ فحص {site_name}")
+            jobs = scraper.search_jobs()
+            logger.info(f"{site_name}: تم العثور على {len(jobs)} مشروع")
+            all_jobs.extend(jobs)
+        except Exception as e:
+            logger.exception(f"خطأ أثناء فحص {site_name}: {e}")
+
+    return all_jobs
+
+
+def main():
+    token = os.getenv("BOT_TOKEN")
+    chat_id = os.getenv("CHAT_ID")
+
+    if not token:
+        raise ValueError("BOT_TOKEN غير موجود في ملف البيئة")
     if not chat_id:
-        raise ValueError("TELEGRAM_CHAT_ID is missing in environment variables")
+        raise ValueError("CHAT_ID غير موجود في ملف البيئة")
 
     db = JobsDatabase()
-    mostaql = MostaqlScraper()
-    khamsat = KhamsatScraper()
-    telegram = TelegramBot(token=bot_token, db=db)
+    bot = TelegramBot(token=token, db=db, polling_enabled=False)
+
+    logger.info("البوت بدأ التشغيل")
+
+    try:
+        bot.send_message("تم تشغيل البوت بنجاح وهو الآن يراقب المشاريع الجديدة")
+    except Exception as e:
+        logger.exception(f"تعذر إرسال رسالة البداية: {e}")
 
     while True:
         try:
-            logger.info("🚀 Starting scraping...")
+            jobs = collect_jobs()
+            new_jobs = []
 
-            mostaql_jobs = mostaql.search_jobs()
-            khamsat_jobs = khamsat.search_jobs()
+            for job in jobs:
+                job_url = job.get("url", "").strip()
 
-            all_jobs = mostaql_jobs + khamsat_jobs
-            logger.info(f"📊 Total collected: {len(all_jobs)}")
+                if not job_url:
+                    continue
 
-            new_jobs = db.get_new_jobs(all_jobs)
-            logger.info(f"🔥 New jobs: {len(new_jobs)}")
+                if not db.job_exists(job_url):
+                    db.add_job(job)
+                    new_jobs.append(job)
 
             if new_jobs:
+                logger.info(f"تم العثور على {len(new_jobs)} مشروع جديد")
                 for job in new_jobs:
-                    telegram.notify_subscribers(job)
-
-            logger.info("===== RUN END =====")
+                    try:
+                        bot.send_new_job(job)
+                        time.sleep(2)
+                    except Exception as e:
+                        logger.exception(f"فشل إرسال مشروع: {e}")
+            else:
+                logger.info("لا يوجد مشاريع جديدة حالياً")
 
         except Exception as e:
-            logger.error(f"❌ Main loop error: {e}", exc_info=True)
+            logger.exception(f"خطأ في اللوب الرئيسية: {e}")
 
-        logger.info("⏳ Waiting 60 seconds...")
-        time.sleep(60)
+        logger.info(f"انتظار {CHECK_INTERVAL} ثانية قبل الفحص التالي")
+        time.sleep(CHECK_INTERVAL)
 
 
 if __name__ == "__main__":
-    run_bot()
+    main()
