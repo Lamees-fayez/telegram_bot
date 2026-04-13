@@ -1,40 +1,50 @@
-                        job["platform"] = name
-                        key = self.build_key(name, job)
+import time
+import logging
 
-                        if not key:
-                            continue
+from database import JobsDatabase
+from MostaqlScraper import MostaqlScraper
+from khamsat_scraper import KhamsatScraper
+from telegram_bot import TelegramBot
 
-                        if key in self.sent_jobs:
-                            continue
-
-                        saved = self.db.save_job(name, job)
-
-                        if saved:
-                            self.sent_jobs.add(key)
-                            self.save_state()
-                            self.bot.notify_subscribers(job)
-                            total += 1
-
-                            logger.info(f"Sent: {job.get('title','')[:50]}")
-
-                    except Exception as e:
-                        logger.exception(f"Job error: {e}")
-
-            except Exception as e:
-                logger.exception(f"{name} scraper error: {e}")
-
-        logger.info(f"New jobs: {total}")
-        logger.info("===== RUN END =====")
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 
-if __name__ == "__main__":
-    bot = JobsBot()
+def run_bot():
+    db = JobsDatabase()
+
+    mostaql = MostaqlScraper()
+    khamsat = KhamsatScraper()
+
+    telegram = TelegramBot()
 
     while True:
         try:
-            bot.run_once()
-        except Exception as e:
-            logger.exception(f"Main loop error: {e}")
+            logger.info("🚀 Starting scraping...")
 
-        logger.info("Waiting 60 seconds...\n")
+            mostaql_jobs = mostaql.search_jobs()
+            khamsat_jobs = khamsat.search_jobs()
+
+            all_jobs = mostaql_jobs + khamsat_jobs
+
+            logger.info(f"📊 Total collected: {len(all_jobs)}")
+
+            # ✅ الجديد فقط
+            new_jobs = db.get_new_jobs(all_jobs)
+
+            logger.info(f"🔥 New jobs: {len(new_jobs)}")
+
+            if new_jobs:
+                telegram.send_jobs(new_jobs)
+
+            logger.info("===== RUN END =====")
+
+        except Exception as e:
+            logger.error(f"❌ Error: {e}")
+
+        logger.info("⏳ Waiting 60 seconds...")
         time.sleep(60)
+
+
+if __name__ == "__main__":
+    run_bot()
