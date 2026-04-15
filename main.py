@@ -8,7 +8,6 @@ from telegram_bot import TelegramBot
 from MostaqlScraper import MostaqlScraper
 from KhamsatScraper import KhamsatScraper
 
-
 load_dotenv()
 
 logging.basicConfig(
@@ -17,7 +16,6 @@ logging.basicConfig(
 )
 
 logger = logging.getLogger(__name__)
-
 
 CHECK_INTERVAL = int(os.getenv("CHECK_INTERVAL", 60))
 
@@ -28,7 +26,6 @@ def collect_jobs():
     scrapers = [
         ("مستقل", MostaqlScraper()),
         ("خمسات", KhamsatScraper()),
-        ("نفذلي", NafethlyScraper()),
     ]
 
     for site_name, scraper in scrapers:
@@ -44,21 +41,28 @@ def collect_jobs():
 
 
 def main():
-    token = os.getenv("BOT_TOKEN")
-    chat_id = os.getenv("CHAT_ID")
+    token = os.getenv("TELEGRAM_BOT_TOKEN")
+    chat_id = os.getenv("TELEGRAM_CHAT_ID")
 
     if not token:
-        raise ValueError("BOT_TOKEN غير موجود في ملف البيئة")
+        raise ValueError("TELEGRAM_BOT_TOKEN غير موجود في ملف البيئة")
+
     if not chat_id:
-        raise ValueError("CHAT_ID غير موجود في ملف البيئة")
+        raise ValueError("TELEGRAM_CHAT_ID غير موجود في ملف البيئة")
 
     db = JobsDatabase()
-    bot = TelegramBot(token=token, db=db, polling_enabled=False)
+    bot = TelegramBot(token=token, db=db)
 
     logger.info("البوت بدأ التشغيل")
 
     try:
-        bot.send_message("تم تشغيل البوت بنجاح وهو الآن يراقب المشاريع الجديدة")
+        if hasattr(bot, "bot"):
+            bot.bot.send_message(
+                chat_id=int(chat_id),
+                text="تم تشغيل البوت بنجاح وهو الآن يراقب المشاريع الجديدة"
+            )
+        else:
+            logger.warning("تعذر إرسال رسالة البداية: كائن bot الداخلي غير موجود")
     except Exception as e:
         logger.exception(f"تعذر إرسال رسالة البداية: {e}")
 
@@ -68,7 +72,7 @@ def main():
             new_jobs = []
 
             for job in jobs:
-                job_url = job.get("url", "").strip()
+                job_url = str(job.get("url", "")).strip()
 
                 if not job_url:
                     continue
@@ -81,7 +85,7 @@ def main():
                 logger.info(f"تم العثور على {len(new_jobs)} مشروع جديد")
                 for job in new_jobs:
                     try:
-                        bot.send_new_job(job)
+                        bot.notify_subscribers(job)
                         time.sleep(2)
                     except Exception as e:
                         logger.exception(f"فشل إرسال مشروع: {e}")
