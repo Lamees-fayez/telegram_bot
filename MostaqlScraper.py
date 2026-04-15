@@ -1,22 +1,57 @@
-import sqlite3
+import requests
+from bs4 import BeautifulSoup
+import re
 
-class JobsDatabase:
-    def __init__(self):
-        self.conn = sqlite3.connect("jobs.db", check_same_thread=False)
-        self.conn.execute("""
-        CREATE TABLE IF NOT EXISTS jobs (
-            id TEXT PRIMARY KEY
-        )
-        """)
+KEYWORDS = [
+    "excel", "power bi", "dashboard",
+    "اكسل", "داشبورد", "تحليل بيانات",
+    "sql", "python", "scraping","سحب بيانات","web scrapping","Excel","data analysis"
+]
 
-    def exists(self, job_id: str) -> bool:
-        cur = self.conn.cursor()
-        cur.execute("SELECT 1 FROM jobs WHERE id = ?", (job_id,))
-        return cur.fetchone() is not None
 
-    def add(self, job_id: str):
-        self.conn.execute(
-            "INSERT OR IGNORE INTO jobs (id) VALUES (?)",
-            (job_id,)
-        )
-        self.conn.commit()
+class MostaqlScraper:
+    URL = "https://mostaql.com/projects"
+
+    def search_jobs(self):
+        jobs = []
+
+        res = requests.get(self.URL)
+        soup = BeautifulSoup(res.text, "html.parser")
+
+        links = soup.find_all("a", href=re.compile(r"/project/\d+"))
+
+        seen = set()
+
+        for link in links:
+            title = link.get_text(strip=True)
+            href = link.get("href")
+
+            if not title or not href:
+                continue
+
+            full_url = "https://mostaql.com" + href
+
+            job_id = re.search(r"/project/(\d+)", href)
+            if not job_id:
+                continue
+
+            job_id = job_id.group(1)
+
+            if job_id in seen:
+                continue
+
+            seen.add(job_id)
+
+            text = title.lower()
+
+            if not any(k in text for k in KEYWORDS):
+                continue
+
+            jobs.append({
+                "job_id": job_id,
+                "title": title,
+                "url": full_url,
+                "platform": "mostaql"
+            })
+
+        return jobs
