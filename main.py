@@ -5,8 +5,8 @@ from dotenv import load_dotenv
 
 from database import JobsDatabase
 from telegram_bot import TelegramBot
-from scrapers.mostaql_scraper import MostaqlScraper
-from scrapers.khamsat_scraper import KhamsatScraper
+from MostaqlScraper import MostaqlScraper
+from KhamsatScraper import KhamsatScraper
 from scrapers.nafethly_scraper import NafethlyScraper
 
 load_dotenv()
