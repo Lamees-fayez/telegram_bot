@@ -7,7 +7,7 @@ from database import JobsDatabase
 from telegram_bot import TelegramBot
 from MostaqlScraper import MostaqlScraper
 from KhamsatScraper import KhamsatScraper
-from scrapers.nafethly_scraper import NafethlyScraper
+
 
 load_dotenv()
 
