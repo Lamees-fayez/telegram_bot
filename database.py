@@ -1,3 +1,4 @@
+import os
 import sqlite3
 import logging
 
@@ -27,7 +28,10 @@ class JobsDatabase:
 
     def job_exists(self, unique_key: str) -> bool:
         cursor = self.conn.cursor()
-        cursor.execute("SELECT 1 FROM jobs WHERE unique_key = ? LIMIT 1", (unique_key,))
+        cursor.execute(
+            "SELECT 1 FROM jobs WHERE unique_key = ? LIMIT 1",
+            (str(unique_key),)
+        )
         return cursor.fetchone() is not None
 
     def add_job(self, job: dict, unique_key: str):
@@ -36,10 +40,19 @@ class JobsDatabase:
             INSERT OR IGNORE INTO jobs (unique_key, job_id, title, url, platform)
             VALUES (?, ?, ?, ?, ?)
         """, (
-            unique_key,
+            str(unique_key),
             str(job.get("job_id", "")),
             str(job.get("title", "")),
             str(job.get("url", "")),
             str(job.get("platform", "unknown")),
         ))
         self.conn.commit()
+
+    def get_subscribers(self):
+        chat_id = os.getenv("TELEGRAM_CHAT_ID") or os.getenv("CHAT_ID")
+        if chat_id:
+            try:
+                return [int(chat_id)]
+            except Exception:
+                return []
+        return []
