@@ -11,7 +11,7 @@ load_dotenv()
 
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
-INTERVAL = int(os.getenv("CHECK_INTERVAL", 60))
+INTERVAL = int(os.getenv("CHECK_INTERVAL", 30))
 
 
 def main():
